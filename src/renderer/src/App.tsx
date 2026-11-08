@@ -59,6 +59,10 @@ function App(): React.JSX.Element {
   const [generationMessage, setGenerationMessage] = useState('')
   const [generatedImage, setGeneratedImage] = useState('')
   const [generatedFilename, setGeneratedFilename] = useState('')
+  const [pluginProviders, setPluginProviders] = useState<PluginProvider[]>([])
+  const [pluginKeys, setPluginKeys] = useState<Record<string, string>>({})
+  const [pluginMessages, setPluginMessages] = useState<Record<string, string>>({})
+  const [pluginBusy, setPluginBusy] = useState('')
 
   const current = sections.find((item) => item.id === active)
 
@@ -176,6 +180,79 @@ function App(): React.JSX.Element {
       setGenerating(false)
     }
   }
+
+
+  const refreshPlugins = async (): Promise<void> => {
+    try {
+      const result = await window.api.listProviders()
+      setPluginProviders(result.providers)
+    } catch (error) {
+      setPluginMessages((current) => ({
+        ...current,
+        general: error instanceof Error ? error.message : 'Could not load providers.'
+      }))
+    }
+  }
+
+  const savePluginKey = async (providerId: string): Promise<void> => {
+    const apiKey = pluginKeys[providerId] || ''
+    if (!apiKey.trim()) {
+      setPluginMessages((current) => ({ ...current, [providerId]: 'Enter an API key first.' }))
+      return
+    }
+
+    setPluginBusy(providerId)
+    try {
+      const result = await window.api.saveProviderKey(providerId, apiKey)
+      setPluginMessages((current) => ({ ...current, [providerId]: result.message }))
+      if (result.success) {
+        setPluginKeys((current) => ({ ...current, [providerId]: '' }))
+        await refreshPlugins()
+      }
+    } catch (error) {
+      setPluginMessages((current) => ({
+        ...current,
+        [providerId]: error instanceof Error ? error.message : 'Could not save the API key.'
+      }))
+    } finally {
+      setPluginBusy('')
+    }
+  }
+
+  const verifyPlugin = async (providerId: string): Promise<void> => {
+    setPluginBusy(providerId)
+    try {
+      const result = await window.api.testProviderConnection(providerId)
+      setPluginMessages((current) => ({ ...current, [providerId]: result.message }))
+    } catch (error) {
+      setPluginMessages((current) => ({
+        ...current,
+        [providerId]: error instanceof Error ? error.message : 'Connection test failed.'
+      }))
+    } finally {
+      setPluginBusy('')
+    }
+  }
+
+  const removePluginKey = async (providerId: string): Promise<void> => {
+    setPluginBusy(providerId)
+    try {
+      const result = await window.api.removeProviderKey(providerId)
+      setPluginMessages((current) => ({ ...current, [providerId]: result.message }))
+      await refreshPlugins()
+    } catch (error) {
+      setPluginMessages((current) => ({
+        ...current,
+        [providerId]: error instanceof Error ? error.message : 'Could not remove the API key.'
+      }))
+    } finally {
+      setPluginBusy('')
+    }
+  }
+
+  useEffect(() => {
+    if (active === 'plugins') void refreshPlugins()
+  }, [active])
 
   const cardStyle: React.CSSProperties = {
     background: '#171d29',
@@ -799,6 +876,97 @@ function App(): React.JSX.Element {
                 3 minutes, 5 minutes and 10 minutes.
                 Longer videos will use scene generation and automatic assembly.
               </p>
+            </div>
+          </>
+        ) : active === 'plugins' ? (
+          <>
+            <div style={{ ...cardStyle, marginBottom: 18 }}>
+              <h2 style={{ marginTop: 0 }}>Provider Connections</h2>
+              <p style={{ color: '#a7b3c7', fontSize: 13, lineHeight: 1.7 }}>
+                Store API credentials for approved providers. Keys are encrypted in the Electron main process using the operating system's secure storage.
+                They are never returned to the renderer after saving.
+              </p>
+              <p style={{ color: '#f0c477', fontSize: 12, lineHeight: 1.7, marginBottom: 0 }}>
+                Important: this is the credential-management foundation. External image/video generation adapters are not wired into the generation screens yet.
+                Saving a key does not start a job or spend credits.
+              </p>
+              {pluginMessages.general && (
+                <p style={{ color: '#f08080', fontSize: 12 }}>{pluginMessages.general}</p>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: 16 }}>
+              {pluginProviders.map((provider) => (
+                <section key={provider.id} style={cardStyle}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                    <h3 style={{ margin: 0 }}>{provider.name}</h3>
+                    <span style={{
+                      color: provider.configured ? '#71d9a5' : '#e8bd70',
+                      fontSize: 11,
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {provider.configured ? '● KEY SAVED' : '○ NOT CONNECTED'}
+                    </span>
+                  </div>
+                  <p style={{ color: '#a7b3c7', fontSize: 12, lineHeight: 1.6 }}>{provider.description}</p>
+                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', margin: '12px 0' }}>
+                    {provider.capabilities.map((capability) => (
+                      <span key={capability} style={{ background: '#24334a', color: '#b9c9df', borderRadius: 20, padding: '5px 9px', fontSize: 11 }}>
+                        {capability === 'image' ? 'Image' : 'Video'}
+                      </span>
+                    ))}
+                  </div>
+                  <label style={{ display: 'block', fontSize: 12, marginBottom: 7 }}>{provider.keyLabel}</label>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={pluginKeys[provider.id] || ''}
+                    onChange={(event) => setPluginKeys((current) => ({ ...current, [provider.id]: event.target.value }))}
+                    placeholder={provider.keyPlaceholder}
+                    style={{ ...inputStyle, marginBottom: 10 }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => void savePluginKey(provider.id)}
+                      disabled={pluginBusy === provider.id || !(pluginKeys[provider.id] || '').trim()}
+                      style={{ background: '#315d96', color: '#fff', border: 0, borderRadius: 7, padding: '9px 12px', cursor: 'pointer', opacity: pluginBusy === provider.id ? 0.6 : 1 }}
+                    >
+                      {pluginBusy === provider.id ? 'Working...' : 'Save API Key'}
+                    </button>
+                    <button
+                      onClick={() => void verifyPlugin(provider.id)}
+                      disabled={!provider.configured || pluginBusy === provider.id || provider.connectionTest !== 'identity'}
+                      title={provider.connectionTest === 'identity' ? 'Verify the token without generating media' : 'A non-billable verification endpoint is not implemented for this provider'}
+                      style={{ background: '#25334a', color: '#dce7f7', border: '1px solid #405779', borderRadius: 7, padding: '9px 12px', cursor: provider.configured && provider.connectionTest === 'identity' ? 'pointer' : 'not-allowed', opacity: provider.configured && provider.connectionTest === 'identity' ? 1 : 0.5 }}
+                    >
+                      Verify Token
+                    </button>
+                    {provider.configured && (
+                      <button
+                        onClick={() => void removePluginKey(provider.id)}
+                        disabled={pluginBusy === provider.id}
+                        style={{ background: '#3a252b', color: '#ffc2c2', border: '1px solid #70404a', borderRadius: 7, padding: '9px 12px', cursor: 'pointer' }}
+                      >
+                        Remove Key
+                      </button>
+                    )}
+                  </div>
+                  <p style={{ color: '#e8bd70', fontSize: 11, lineHeight: 1.6 }}>{provider.pricingNote}</p>
+                  <p style={{ color: '#98a6bb', fontSize: 11, lineHeight: 1.6 }}>
+                    {provider.connectionTest === 'identity'
+                      ? 'Token verification checks account authentication only; it does not guarantee free credits, model availability or video access.'
+                      : 'Key is encrypted when saved. Verification and generation adapter are not yet implemented for this provider.'}
+                  </p>
+                  {pluginMessages[provider.id] && (
+                    <div style={{ marginTop: 10, padding: 10, background: '#101827', borderRadius: 7, color: '#c8d6e8', fontSize: 11, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
+                      {pluginMessages[provider.id]}
+                    </div>
+                  )}
+                  <a href={provider.docsUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 12, color: '#83b7f3', fontSize: 11 }}>
+                    Official API key page ↗
+                  </a>
+                </section>
+              ))}
             </div>
           </>
         ) : (
