@@ -8,7 +8,15 @@ const api = {
     prompt: string
     width: number
     height: number
-  }) => ipcRenderer.invoke('comfyui:generate-image', request)
+  }) => ipcRenderer.invoke('comfyui:generate-image', request),
+
+  listProviders: () => ipcRenderer.invoke('plugins:list-providers'),
+  saveProviderKey: (providerId: string, apiKey: string) =>
+    ipcRenderer.invoke('plugins:save-key', { providerId, apiKey }),
+  removeProviderKey: (providerId: string) =>
+    ipcRenderer.invoke('plugins:remove-key', providerId),
+  testProviderConnection: (providerId: string) =>
+    ipcRenderer.invoke('plugins:test-connection', providerId)
 }
 
 if (process.contextIsolated) {
