@@ -30,7 +30,7 @@ const PROVIDERS: ProviderDefinition[] = [
   },
   {
     id: 'fal',
-    name: ' fal.ai',
+    name: 'fal.ai',
     description: 'Hosted image and video generation APIs.',
     capabilities: ['image', 'video'],
     keyLabel: 'fal.ai API key',
