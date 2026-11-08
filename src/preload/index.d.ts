@@ -24,6 +24,24 @@ type GenerateImageResult = {
   message: string
 }
 
+type PluginProvider = {
+  id: string
+  name: string
+  description: string
+  capabilities: Array<'image' | 'video'>
+  keyLabel: string
+  keyPlaceholder: string
+  docsUrl: string
+  pricingNote: string
+  connectionTest: 'identity' | 'on-first-use'
+  configured: boolean
+}
+
+type PluginActionResult = {
+  success: boolean
+  message: string
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -32,6 +50,10 @@ declare global {
       generateImage: (
         request: GenerateImageRequest
       ) => Promise<GenerateImageResult>
+      listProviders: () => Promise<{ providers: PluginProvider[] }>
+      saveProviderKey: (providerId: string, apiKey: string) => Promise<PluginActionResult>
+      removeProviderKey: (providerId: string) => Promise<PluginActionResult>
+      testProviderConnection: (providerId: string) => Promise<PluginActionResult>
     }
   }
 }
