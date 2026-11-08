@@ -1,8 +1,8 @@
 
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { registerPluginHandlers } from './plugin-manager'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
 
 const COMFYUI_URL = 'http://127.0.0.1:8188'
 
@@ -123,7 +123,6 @@ function createWindow(): void {
     height: 800,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -399,6 +398,7 @@ ipcMain.handle(
 )
 
 app.whenReady().then(() => {
+  registerPluginHandlers()
   electronApp.setAppUserModelId('com.electron')
 
   app.on('browser-window-created', (_, window) => {
